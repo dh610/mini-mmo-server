@@ -7,6 +7,8 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(ENABLE_TSAN "Build with ThreadSanitizer" OFF)
 
+add_compile_options(-Wall -Wextra -Wpedantic)
+
 if(ENABLE_TSAN)
     add_compile_options(-fsanitize=thread -g)
     add_link_options(-fsanitize=thread)
@@ -17,3 +19,8 @@ file(GLOB_RECURSE MMO_SOURCES CONFIGURE_DEPENDS src/*.cpp)
 add_executable(mmo-server ${MMO_SOURCES})
 target_include_directories(mmo-server PRIVATE src)
 target_link_libraries(mmo-server PRIVATE pthread)
+
+enable_testing()
+add_executable(mmo-tests tests/test_packet.cpp src/net/Packet.cpp)
+target_include_directories(mmo-tests PRIVATE src third_party/doctest)
+add_test(NAME mmo-tests COMMAND mmo-tests)
