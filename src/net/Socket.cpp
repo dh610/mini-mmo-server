@@ -3,19 +3,18 @@
 Socket::Socket(int fd) : fd_(fd) {}
 
 Socket::~Socket() {
-    // fd_가 유효할 때만 close
     closeIfValid();
 }
 
 Socket::Socket(Socket&& other) noexcept
     : fd_(other.fd_)
 {
-    other.fd_ = -1;
+    other.fd_ = -1;  // 안 비우면 other 소멸 시 같은 fd가 이중 close됨
 }
 
 Socket& Socket::operator=(Socket&& other) noexcept {
     if (this != &other) {
-        closeIfValid();
+        closeIfValid();  // 기존에 들고 있던 fd부터 닫아야 누수 없음
         fd_ = other.fd();
         other.fd_ = -1;
     }
