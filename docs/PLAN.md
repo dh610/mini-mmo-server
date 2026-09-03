@@ -1,12 +1,15 @@
 # 진행 순서
 
-**현재 상태 (2026-09-02): Step 1 완료, 머지됨. Step 2 시작 전.**
+**현재 상태 (2026-09-03): Step 2 완료, 머지됨. Step 3 시작 전.**
 
 - Step 0 — 개념 학습(RAII, 참조/포인터, vector, thread/mutex, 헤더분리)은 대화로 진행, 별도 산출물 없음
 - Step 1 — `src/net/Socket.h`·`Socket.cpp`(RAII 소켓 래퍼, 복사금지·이동허용) +
   `src/main.cpp`(연결당 스레드 에코 서버) 완료. `nc`로 에코 동작 확인.
   `docs/decisions/01-io-model.md` 작성 완료. PR #1로 `main`에 머지됨
-- Step 2 — 아직 시작 안 함 (패킷 프레이밍 + 직렬화)
+- Step 2 — `src/net/Packet.h`·`Packet.cpp`(PacketHeader 필드별 직렬화/역직렬화) +
+  `main.cpp`의 부분 수신 루프(`drainPackets`)로 패킷 프레이밍 완성. doctest 왕복
+  테스트 4종 통과, 실서버로 분할/합쳐진 패킷 echo 수동 검증 완료. PR #2로 `main`에 머지됨
+- Step 3 — 아직 시작 안 함 (tick 루프 + naive 브로드캐스트, **완료 시 `git tag v0.1-naive` 필수**)
 
 각 Step은 **커밋 가능한 상태**로 끝난다. 중간에 멈춰도 제출 가능하도록 설계했다.
 
