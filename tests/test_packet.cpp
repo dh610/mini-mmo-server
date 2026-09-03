@@ -9,7 +9,7 @@ void checkRoundTrip(const PacketHeader& original) {
     std::vector<uint8_t> buf;
     serializeHeader(original, buf);
 
-    PacketHeader restored = deserializeHeader(buf);
+    PacketHeader restored = deserializeHeader(buf, 0);
 
     CHECK(restored.length == original.length);
     CHECK(restored.type == original.type);
