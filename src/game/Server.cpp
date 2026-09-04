@@ -23,7 +23,11 @@ void beginPacket(std::vector<uint8_t>& buf, PacketType type, uint32_t sequence) 
 }  // namespace
 
 Server::Server(const Config& cfg)
-    : cfg_(cfg), world_(cfg.mapSize, cfg.aoi, cfg.maxEntities) {}
+    : cfg_(cfg),
+      world_(cfg.mapSize, cfg.aoi, cfg.cell, cfg.maxEntities),
+      mode_(cfg.mode == "grid"        ? Mode::Grid
+            : cfg.mode == "broadcast" ? Mode::Broadcast
+                                      : Mode::Naive) {}
 
 void Server::removeSession(const std::shared_ptr<Session>& session) {
     std::lock_guard<std::mutex> lock(sessionsMutex_);
@@ -114,7 +118,11 @@ void Server::broadcast() {
         if (!me.active) continue;
 
         visible.clear();
-        world_.collectNaive(me, visible, candidates);
+        switch (mode_) {
+            case Mode::Broadcast: world_.collectAll(me, visible, candidates); break;
+            case Mode::Naive: world_.collectNaive(me, visible, candidates); break;
+            case Mode::Grid: world_.collectGrid(me, visible, candidates); break;
+        }
         receivers += visible.size();
 
         beginPacket(buf, PacketType::Snapshot,

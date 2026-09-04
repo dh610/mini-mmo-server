@@ -20,11 +20,35 @@ struct Command {
     int32_t y;
 };
 
+// 맵을 정사각형 셀로 자르고, 각 셀이 그 안의 entity id를 들고 있다.
+// 포인터가 아니라 id를 담는 이유는 World::entities_가 재할당되지 않더라도
+// id 기반이 셀 이동 시 지우기가 간단하기 때문이다.
+class Grid {
+public:
+    Grid(int32_t mapSize, int32_t cellSize);
+
+    int32_t cellSize() const { return cellSize_; }
+    int32_t dim() const { return dim_; }
+    int32_t cellOf(int32_t coord) const;
+
+    void insert(int32_t cx, int32_t cy, uint32_t id);
+    void remove(int32_t cx, int32_t cy, uint32_t id);
+
+    const std::vector<uint32_t>& at(int32_t cx, int32_t cy) const {
+        return cells_[static_cast<size_t>(cy) * static_cast<size_t>(dim_) + static_cast<size_t>(cx)];
+    }
+
+private:
+    int32_t cellSize_;
+    int32_t dim_;
+    std::vector<std::vector<uint32_t>> cells_;
+};
+
 class World {
 public:
     // 슬롯은 maxEntities로 고정된다. 실행 중 entities_가 재할당되면
     // tick 스레드가 순회하는 도중에 무너진다.
-    World(int32_t mapSize, int32_t aoiHalfExtent, uint32_t maxEntities);
+    World(int32_t mapSize, int32_t aoiHalfExtent, int32_t cellSize, uint32_t maxEntities);
 
     int32_t mapSize() const { return mapSize_; }
     int32_t aoi() const { return aoi_; }
@@ -39,15 +63,26 @@ public:
     void applyCommands();
     const std::vector<Entity>& entities() const { return entities_; }
 
+    // 필터 없이 활성 entity 전부를 out에 넣는다. AOI 적용 전 기준선.
+    void collectAll(const Entity& me, std::vector<uint32_t>& out, uint64_t& candidates) const;
+
     // me 주변 AOI 안 entity의 id를 out에 채우고, broad phase가 넘긴 후보 수를
     // candidates에 누적한다.
     void collectNaive(const Entity& me, std::vector<uint32_t>& out, uint64_t& candidates) const;
+
+    // broad phase만 다르다. 후보를 AOI가 걸치는 셀 범위로 좁힌 뒤 같은 narrow phase를 태운다.
+    void collectGrid(const Entity& me, std::vector<uint32_t>& out, uint64_t& candidates) const;
+
+    // Move 적용 중 셀이 바뀐 횟수. border 패턴에서 bookkeeping 비용을 보기 위한 지표.
+    uint64_t cellTransitions() const { return cellTransitions_; }
 
 private:
     int32_t mapSize_;
     int32_t aoi_;
 
+    Grid grid_;
     std::vector<Entity> entities_;  // 크기 고정. id == 인덱스, erase하지 않는다
+    uint64_t cellTransitions_ = 0;
 
     std::mutex slotMutex_;
     std::vector<uint32_t> freeSlots_;

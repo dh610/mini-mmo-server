@@ -1,7 +1,39 @@
 #include "World.h"
 
-World::World(int32_t mapSize, int32_t aoiHalfExtent, uint32_t maxEntities)
-    : mapSize_(mapSize), aoi_(aoiHalfExtent), entities_(maxEntities) {
+Grid::Grid(int32_t mapSize, int32_t cellSize)
+    : cellSize_(cellSize > 0 ? cellSize : 1) {
+    // 맵이 셀 크기로 나누어떨어지지 않으면 마지막 셀이 남는 만큼을 흡수한다.
+    dim_ = mapSize / cellSize_ + 1;
+    cells_.resize(static_cast<size_t>(dim_) * static_cast<size_t>(dim_));
+}
+
+int32_t Grid::cellOf(int32_t coord) const {
+    int32_t c = coord / cellSize_;
+    if (c < 0) return 0;
+    if (c >= dim_) return dim_ - 1;
+    return c;
+}
+
+void Grid::insert(int32_t cx, int32_t cy, uint32_t id) {
+    cells_[static_cast<size_t>(cy) * static_cast<size_t>(dim_) + static_cast<size_t>(cx)]
+        .push_back(id);
+}
+
+void Grid::remove(int32_t cx, int32_t cy, uint32_t id) {
+    std::vector<uint32_t>& v =
+        cells_[static_cast<size_t>(cy) * static_cast<size_t>(dim_) + static_cast<size_t>(cx)];
+    // 순서가 의미 없으므로 swap-and-pop. erase면 뒤를 전부 당겨야 한다.
+    for (size_t i = 0; i < v.size(); ++i) {
+        if (v[i] == id) {
+            v[i] = v.back();
+            v.pop_back();
+            return;
+        }
+    }
+}
+
+World::World(int32_t mapSize, int32_t aoiHalfExtent, int32_t cellSize, uint32_t maxEntities)
+    : mapSize_(mapSize), aoi_(aoiHalfExtent), grid_(mapSize, cellSize), entities_(maxEntities) {
     freeSlots_.reserve(maxEntities);
     // pop_back으로 꺼내므로 역순으로 채운다.
     for (uint32_t i = maxEntities; i > 0; --i) {
@@ -45,17 +77,39 @@ void World::applyCommands() {
                 e.x = c.x;
                 e.y = c.y;
                 e.active = true;
+                grid_.insert(grid_.cellOf(e.x), grid_.cellOf(e.y), e.id);
                 break;
-            case CmdType::Move:
+            case CmdType::Move: {
                 if (!e.active) break;
                 // 클라이언트가 보낸 좌표는 믿지 않고 맵 범위로 자른다.
-                e.x = c.x < 0 ? 0 : (c.x > mapSize_ ? mapSize_ : c.x);
-                e.y = c.y < 0 ? 0 : (c.y > mapSize_ ? mapSize_ : c.y);
+                int32_t nx = c.x < 0 ? 0 : (c.x > mapSize_ ? mapSize_ : c.x);
+                int32_t ny = c.y < 0 ? 0 : (c.y > mapSize_ ? mapSize_ : c.y);
+
+                int32_t oldCx = grid_.cellOf(e.x), oldCy = grid_.cellOf(e.y);
+                int32_t newCx = grid_.cellOf(nx), newCy = grid_.cellOf(ny);
+                if (oldCx != newCx || oldCy != newCy) {
+                    grid_.remove(oldCx, oldCy, e.id);
+                    grid_.insert(newCx, newCy, e.id);
+                    ++cellTransitions_;
+                }
+                e.x = nx;
+                e.y = ny;
                 break;
+            }
             case CmdType::Despawn:
+                if (!e.active) break;
+                grid_.remove(grid_.cellOf(e.x), grid_.cellOf(e.y), e.id);
                 e.active = false;
                 break;
         }
+    }
+}
+
+void World::collectAll(const Entity& me, std::vector<uint32_t>& out, uint64_t& candidates) const {
+    for (const Entity& other : entities_) {
+        if (!other.active || other.id == me.id) continue;
+        ++candidates;
+        out.push_back(other.id);
     }
 }
 
@@ -64,5 +118,22 @@ void World::collectNaive(const Entity& me, std::vector<uint32_t>& out, uint64_t&
         if (!other.active || other.id == me.id) continue;
         ++candidates;  // naive의 broad phase는 활성 entity 전부
         if (inAoi(me, other, aoi_)) out.push_back(other.id);
+    }
+}
+
+void World::collectGrid(const Entity& me, std::vector<uint32_t>& out, uint64_t& candidates) const {
+    // AOI 정사각형이 걸치는 셀 범위. cell == aoi면 3x3이 된다.
+    int32_t minCx = grid_.cellOf(me.x - aoi_), maxCx = grid_.cellOf(me.x + aoi_);
+    int32_t minCy = grid_.cellOf(me.y - aoi_), maxCy = grid_.cellOf(me.y + aoi_);
+
+    for (int32_t cy = minCy; cy <= maxCy; ++cy) {
+        for (int32_t cx = minCx; cx <= maxCx; ++cx) {
+            for (uint32_t id : grid_.at(cx, cy)) {
+                const Entity& other = entities_[id];
+                if (!other.active || other.id == me.id) continue;
+                ++candidates;
+                if (inAoi(me, other, aoi_)) out.push_back(other.id);
+            }
+        }
     }
 }
