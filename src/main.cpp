@@ -1,79 +1,97 @@
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <thread>
-#include <stdexcept>
-#include <cstring>
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <string>
+#include <thread>
 
-#include "net/Socket.h"
-#include "net/Packet.h"
+#include "game/Server.h"
 
-// accumulator의 offset 이후에서 완성된 패킷을 있는 만큼 꺼내 echo하고 offset을 전진시킨다.
-// 패킷이 덜 왔으면(헤더 또는 payload 부족) 조용히 리턴 — 정상적인 TCP 상황이라 에러가 아니다.
-// 길이를 미리 확인하지 않고 deserializeHeader를 부르면 in.at()이 예외를 던지고,
-// 그게 스레드 진입 함수 밖으로 새어나가면 std::terminate로 서버 전체가 죽는다.
-void drainPackets(std::vector<uint8_t>& accumulator, size_t& offset, Socket& sock) {
-    size_t cur_size = accumulator.size();
-    while(offset < cur_size) {
-        if (cur_size - offset < sizeof(PacketHeader))
-            return;
-        PacketHeader header = deserializeHeader(accumulator, offset);
+namespace {
 
-        // length는 헤더 포함 전체 길이라 sizeof(PacketHeader)보다 작으면 잘못된 패킷.
-        if (header.length < sizeof(PacketHeader))
-            return;
-        if (cur_size < offset + header.length)
-            return;
-
-        send(sock.fd(), accumulator.data() + offset, header.length, 0);  // offset 전진 전에 보내야 함
-        offset += header.length;
-    }
+// 측정 조건을 실행 인자로 빼두면 코드를 고치지 않고 조건만 바꿔 비교할 수 있다.
+// naive와 grid를 같은 바이너리로 연속 측정하기 위해 mode도 여기 있다.
+void printUsage(const char* argv0) {
+    printf(
+        "usage: %s [options]\n"
+        "  --port N        listen port (default 12345)\n"
+        "  --map N         map side length (default 3500, keep it a multiple of --cell)\n"
+        "  --aoi N         AOI half-extent (default 500)\n"
+        "  --cell N        grid cell size (default 500)\n"
+        "  --tick N        tick rate in Hz (default 20)\n"
+        "  --mode S        naive | grid (default naive)\n"
+        "  --max N         max concurrent entities (default 1024)\n"
+        "  --queue N       send queue capacity (default 4)\n"
+        "  --duration N    print summary and exit after N seconds (0 = run forever)\n",
+        argv0);
 }
 
-// Socket을 값으로 받아 스레드가 fd의 유일한 소유자가 되게 한다 (복사 =delete, 이동만 허용).
-void handleClient(Socket sock) {
-    // accumulator = 받았지만 아직 처리 못 한 바이트 전부, offset = 그중 처리된 위치.
-    // 새 데이터는 항상 끝(size())에 이어붙이고, offset은 drainPackets만 전진시킨다.
-    std::vector<uint8_t> accumulator;
-    size_t offset = 0;
+// 누적 카운터에서 최종 요약을 만든다. 조건 없는 숫자는 나중에 방어할 수 없으므로
+// 파라미터를 같은 줄에 함께 찍는다.
+void printSummary(const Config& cfg, const Metrics& m, int seconds) {
+    uint64_t ticks = m.ticks.load();
+    uint64_t snapshots = m.snapshotsSent.load();
+    uint64_t bytes = m.bytesSent.load();
+    uint64_t receivers = m.receiversSum.load();
+    uint64_t candidates = m.candidatesSum.load();
 
-    while (true) {
-        // old_size는 resize 전에 캡처해야 한다 — resize가 size()를 바꾸므로.
-        size_t old_size = accumulator.size();
-        accumulator.resize(old_size + 4096);
-        ssize_t n = recv(sock.fd(), accumulator.data() + old_size, 4096, 0);
-        if (n <= 0) return;
-        accumulator.resize(old_size + n);
+    double K = snapshots ? static_cast<double>(receivers) / static_cast<double>(snapshots) : 0.0;
+    double cand = snapshots ? static_cast<double>(candidates) / static_cast<double>(snapshots) : 0.0;
 
-        drainPackets(accumulator, offset, sock);
-    }
+    printf("\n--- summary ---\n");
+    printf("mode=%s map=%d aoi=%d cell=%d tick=%dHz duration=%ds\n", cfg.mode.c_str(), cfg.mapSize,
+           cfg.aoi, cfg.cell, cfg.tickHz, seconds);
+    printf("ticks              %llu\n", (unsigned long long)ticks);
+    printf("tick_overruns      %llu\n", (unsigned long long)m.tickOverruns.load());
+    printf("tick_busy_avg_us   %.1f\n",
+           ticks ? static_cast<double>(m.tickBusyMicros.load()) / static_cast<double>(ticks) : 0.0);
+    printf("snapshots_sent     %llu\n", (unsigned long long)snapshots);
+    printf("snapshots_dropped  %llu\n", (unsigned long long)m.snapshotsDropped.load());
+    printf("bytes_sent         %llu\n", (unsigned long long)bytes);
+    printf("bytes_per_sec      %.0f\n", seconds ? static_cast<double>(bytes) / seconds : 0.0);
+    printf("K_avg              %.2f\n", K);
+    printf("candidates_avg     %.2f\n", cand);
+    printf("precision          %.3f\n", cand > 0 ? K / cand : 0.0);
 }
 
+}  // namespace
 
-int main() {
-    // IPv4 TCP 소켓 생성 후 0.0.0.0:12345로 바인드.
-    struct sockaddr_in serv_addr;
-    Socket serv(socket(PF_INET, SOCK_STREAM, 0));
+int main(int argc, char** argv) {
+    Config cfg;
+    int duration = 0;
 
-    memset(&serv_addr, 0, sizeof(serv_addr));
-    serv_addr.sin_family = AF_INET;
-    serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    serv_addr.sin_port = htons(atoi("12345"));
+    for (int i = 1; i < argc; ++i) {
+        std::string arg = argv[i];
+        auto next = [&]() -> const char* { return (i + 1 < argc) ? argv[++i] : "0"; };
 
-    // bind/listen 리턴값을 안 보면 실패가 조용히 묻힌다 (포트 충돌을 실제로 겪고 추가함).
-    if (bind(serv.fd(), (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
-        perror("bind");
+        if (arg == "--port") cfg.port = static_cast<uint16_t>(atoi(next()));
+        else if (arg == "--map") cfg.mapSize = atoi(next());
+        else if (arg == "--aoi") cfg.aoi = atoi(next());
+        else if (arg == "--cell") cfg.cell = atoi(next());
+        else if (arg == "--tick") cfg.tickHz = atoi(next());
+        else if (arg == "--mode") cfg.mode = next();
+        else if (arg == "--max") cfg.maxEntities = static_cast<uint32_t>(atoi(next()));
+        else if (arg == "--queue") cfg.sendQueueCapacity = static_cast<size_t>(atoi(next()));
+        else if (arg == "--duration") duration = atoi(next());
+        else { printUsage(argv[0]); return 1; }
+    }
+
+    if (cfg.tickHz <= 0) cfg.tickHz = 20;
+    if (cfg.mode != "naive" && cfg.mode != "grid") {
+        fprintf(stderr, "unknown mode: %s\n", cfg.mode.c_str());
         return 1;
     }
-    if (listen(serv.fd(), 10) < 0) {
-        perror("listen");
-        return 1;
+
+    Server server(cfg);
+
+    if (duration > 0) {
+        // 측정용. 정해진 시간이 지나면 요약을 찍고 그대로 종료한다.
+        std::thread([&server, &cfg, duration] {
+            std::this_thread::sleep_for(std::chrono::seconds(duration));
+            printSummary(cfg, server.metrics(), duration);
+            fflush(stdout);
+            _exit(0);
+        }).detach();
     }
 
-    while (true) {
-        int client_fd = accept(serv.fd(), nullptr, nullptr);
-        Socket clientSocket(client_fd);
-        // std::thread는 joinable인 채로 소멸되면 std::terminate를 부르므로 detach 필요.
-        std::thread(handleClient, std::move(clientSocket)).detach();
-    }
+    return server.run();
 }
