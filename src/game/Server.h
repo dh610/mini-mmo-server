@@ -22,7 +22,7 @@ struct Config {
     std::string mode = "naive";  // naive | grid
 };
 
-// 연결 하나. 수신 스레드가 소유하고, tick과 송신 스레드가 shared_ptr로 함께 본다.
+// 수신/송신/tick 세 스레드가 shared_ptr로 함께 본다.
 struct Session {
     explicit Session(Socket&& s, uint32_t entityId, size_t queueCap)
         : sock(std::move(s)), id(entityId), out(queueCap) {}

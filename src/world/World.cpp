@@ -3,7 +3,7 @@
 World::World(int32_t mapSize, int32_t aoiHalfExtent, uint32_t maxEntities)
     : mapSize_(mapSize), aoi_(aoiHalfExtent), entities_(maxEntities) {
     freeSlots_.reserve(maxEntities);
-    // 뒤에서 pop_back으로 꺼내므로 역순으로 채워 0번부터 배정되게 한다.
+    // pop_back으로 꺼내므로 역순으로 채운다.
     for (uint32_t i = maxEntities; i > 0; --i) {
         entities_[i - 1].id = i - 1;
         freeSlots_.push_back(i - 1);
@@ -30,8 +30,7 @@ void World::pushCommand(const Command& cmd) {
 }
 
 void World::applyCommands() {
-    // 큐를 통째로 바꿔치기하고 락을 즉시 놓는다. 적용은 락 밖에서 —
-    // 락을 쥔 채 처리하면 그동안 수신 스레드 전부가 pushCommand에서 막힌다.
+    // 큐를 바꿔치기하고 락을 즉시 놓는다. 쥔 채로 처리하면 수신 스레드가 전부 막힌다.
     std::vector<Command> batch;
     {
         std::lock_guard<std::mutex> lock(cmdMutex_);
@@ -49,7 +48,7 @@ void World::applyCommands() {
                 break;
             case CmdType::Move:
                 if (!e.active) break;
-                // 맵 밖으로 나가지 않게 자른다. 클라이언트를 믿지 않는다는 뜻이기도 하다.
+                // 클라이언트가 보낸 좌표는 믿지 않고 맵 범위로 자른다.
                 e.x = c.x < 0 ? 0 : (c.x > mapSize_ ? mapSize_ : c.x);
                 e.y = c.y < 0 ? 0 : (c.y > mapSize_ ? mapSize_ : c.y);
                 break;
@@ -63,7 +62,7 @@ void World::applyCommands() {
 void World::collectNaive(const Entity& me, std::vector<uint32_t>& out, uint64_t& candidates) const {
     for (const Entity& other : entities_) {
         if (!other.active || other.id == me.id) continue;
-        ++candidates;  // naive의 broad phase는 "전원" — 활성 entity 전부가 후보다
+        ++candidates;  // naive의 broad phase는 활성 entity 전부
         if (inAoi(me, other, aoi_)) out.push_back(other.id);
     }
 }

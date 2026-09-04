@@ -8,8 +8,6 @@
 
 namespace {
 
-// 측정 조건을 실행 인자로 빼두면 코드를 고치지 않고 조건만 바꿔 비교할 수 있다.
-// naive와 grid를 같은 바이너리로 연속 측정하기 위해 mode도 여기 있다.
 void printUsage(const char* argv0) {
     printf(
         "usage: %s [options]\n"
@@ -25,8 +23,7 @@ void printUsage(const char* argv0) {
         argv0);
 }
 
-// 누적 카운터에서 최종 요약을 만든다. 조건 없는 숫자는 나중에 방어할 수 없으므로
-// 파라미터를 같은 줄에 함께 찍는다.
+// 파라미터를 같은 줄에 찍는다. 조건 없는 숫자는 나중에 대조할 수 없다.
 void printSummary(const Config& cfg, const Metrics& m, int seconds) {
     uint64_t ticks = m.ticks.load();
     uint64_t snapshots = m.snapshotsSent.load();
@@ -84,7 +81,7 @@ int main(int argc, char** argv) {
     Server server(cfg);
 
     if (duration > 0) {
-        // 측정용. 정해진 시간이 지나면 요약을 찍고 그대로 종료한다.
+        // 측정용. 지정 시간이 지나면 요약을 찍고 종료한다.
         std::thread([&server, &cfg, duration] {
             std::this_thread::sleep_for(std::chrono::seconds(duration));
             printSummary(cfg, server.metrics(), duration);
