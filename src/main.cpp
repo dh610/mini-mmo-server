@@ -16,7 +16,7 @@ void printUsage(const char* argv0) {
         "  --aoi N         AOI half-extent (default 500)\n"
         "  --cell N        grid cell size (default 500)\n"
         "  --tick N        tick rate in Hz (default 20)\n"
-        "  --mode S        naive | grid (default naive)\n"
+        "  --mode S        broadcast | naive | grid (default naive)\n"
         "  --max N         max concurrent entities (default 1024)\n"
         "  --queue N       send queue capacity (default 4)\n"
         "  --duration N    print summary and exit after N seconds (0 = run forever)\n",
@@ -24,7 +24,7 @@ void printUsage(const char* argv0) {
 }
 
 // 파라미터를 같은 줄에 찍는다. 조건 없는 숫자는 나중에 대조할 수 없다.
-void printSummary(const Config& cfg, const Metrics& m, int seconds) {
+void printSummary(const Config& cfg, const Metrics& m, uint64_t transitions, int seconds) {
     uint64_t ticks = m.ticks.load();
     uint64_t snapshots = m.snapshotsSent.load();
     uint64_t bytes = m.bytesSent.load();
@@ -48,6 +48,7 @@ void printSummary(const Config& cfg, const Metrics& m, int seconds) {
     printf("K_avg              %.2f\n", K);
     printf("candidates_avg     %.2f\n", cand);
     printf("precision          %.3f\n", cand > 0 ? K / cand : 0.0);
+    printf("cell_transitions   %llu\n", (unsigned long long)transitions);
 }
 
 }  // namespace
@@ -73,7 +74,7 @@ int main(int argc, char** argv) {
     }
 
     if (cfg.tickHz <= 0) cfg.tickHz = 20;
-    if (cfg.mode != "naive" && cfg.mode != "grid") {
+    if (cfg.mode != "naive" && cfg.mode != "grid" && cfg.mode != "broadcast") {
         fprintf(stderr, "unknown mode: %s\n", cfg.mode.c_str());
         return 1;
     }
@@ -84,7 +85,7 @@ int main(int argc, char** argv) {
         // 측정용. 지정 시간이 지나면 요약을 찍고 종료한다.
         std::thread([&server, &cfg, duration] {
             std::this_thread::sleep_for(std::chrono::seconds(duration));
-            printSummary(cfg, server.metrics(), duration);
+            printSummary(cfg, server.metrics(), server.world().cellTransitions(), duration);
             fflush(stdout);
             _exit(0);
         }).detach();

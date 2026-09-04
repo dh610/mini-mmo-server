@@ -19,7 +19,10 @@ struct Config {
     int tickHz = 20;
     uint32_t maxEntities = 1024;
     size_t sendQueueCapacity = 4;
-    std::string mode = "naive";  // naive | grid
+    // broadcast : 필터 없이 전원에게. AOI 적용 전 기준선
+    // naive     : 전원을 후보로 놓고 AOI 판정. 전송량은 줄지만 판정 비용이 O(N^2)
+    // grid      : 공간 분할로 후보를 좁힌 뒤 같은 AOI 판정
+    std::string mode = "naive";
 };
 
 // 수신/송신/tick 세 스레드가 shared_ptr로 함께 본다.
@@ -40,6 +43,7 @@ public:
 
     int run();  // accept 루프. 돌아오지 않는다
     const Metrics& metrics() const { return metrics_; }
+    const World& world() const { return world_; }
 
 private:
     void tickLoop();
@@ -50,6 +54,8 @@ private:
 
     Config cfg_;
     World world_;
+    enum class Mode { Broadcast, Naive, Grid };
+    Mode mode_;
     Metrics metrics_;
 
     std::mutex sessionsMutex_;

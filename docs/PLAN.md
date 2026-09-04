@@ -1,6 +1,11 @@
 # 진행 순서
 
-**현재 상태 (2026-09-03): Step 2 완료, 머지됨. Step 3 시작 전.**
+**현재 상태 (2026-09-04): Step 5 완료. 남은 것은 Step 6(아이템 거래)뿐.**
+
+Step 3(tick 루프 + naive, `v0.1-naive` 태그), Step 4(grid AOI + broadcast 기준선),
+Step 5(봇 + 측정, `docs/BENCH.md`), Step 7(README) 완료.
+제출 기한 때문에 Step 3부터는 AI가 코드를 작성하는 방식으로 전환했다 —
+경위는 `docs/AI-LOG.md`의 "도구 사용 범위" 참조.
 
 - Step 0 — 개념 학습(RAII, 참조/포인터, vector, thread/mutex, 헤더분리)은 대화로 진행, 별도 산출물 없음
 - Step 1 — `src/net/Socket.h`·`Socket.cpp`(RAII 소켓 래퍼, 복사금지·이동허용) +
