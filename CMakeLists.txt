@@ -20,6 +20,10 @@ add_executable(mmo-server ${MMO_SOURCES})
 target_include_directories(mmo-server PRIVATE src)
 target_link_libraries(mmo-server PRIVATE pthread)
 
+add_executable(mmo-bot bot/main.cpp src/net/Packet.cpp src/net/Socket.cpp)
+target_include_directories(mmo-bot PRIVATE src)
+target_link_libraries(mmo-bot PRIVATE pthread)
+
 enable_testing()
 add_executable(mmo-tests tests/test_packet.cpp src/net/Packet.cpp)
 target_include_directories(mmo-tests PRIVATE src third_party/doctest)
