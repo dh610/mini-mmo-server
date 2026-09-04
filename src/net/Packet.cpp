@@ -42,3 +42,9 @@ PacketHeader deserializeHeader(const std::vector<uint8_t>& in, size_t startOffse
         readBigEndian(sizeof(PacketHeader::sequence), idx, in)
     };
 }
+
+void patchLength(std::vector<uint8_t>& out) {
+    uint16_t total = static_cast<uint16_t>(out.size());
+    out[0] = static_cast<uint8_t>((total >> kBitsPerByte) & 0xFFu);
+    out[1] = static_cast<uint8_t>(total & 0xFFu);
+}
