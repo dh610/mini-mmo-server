@@ -13,7 +13,6 @@
 
 namespace {
 
-// 헤더를 먼저 쓰고, 페이로드를 다 쓴 뒤 patchLength로 length를 메운다.
 void beginPacket(std::vector<uint8_t>& buf, PacketType type, uint32_t sequence) {
     buf.clear();
     PacketHeader header{0, static_cast<uint16_t>(type), sequence};
@@ -42,7 +41,6 @@ void Server::removeSession(const std::shared_ptr<Session>& session) {
 
 // 게임 상태를 직접 만지지 않고 명령 큐에만 넣는다.
 void Server::receiveLoop(std::shared_ptr<Session> session) {
-    // accumulator = 받았지만 아직 처리 못 한 바이트, offset = 그중 처리된 위치.
     std::vector<uint8_t> accumulator;
     size_t offset = 0;
 
@@ -68,7 +66,6 @@ void Server::receiveLoop(std::shared_ptr<Session> session) {
             offset += header.length;
         }
 
-        // 처리한 앞부분을 잘라내지 않으면 accumulator가 무한히 자란다.
         if (offset > 65536) {
             accumulator.erase(accumulator.begin(), accumulator.begin() + static_cast<long>(offset));
             offset = 0;
@@ -87,7 +84,6 @@ void Server::sendLoop(std::shared_ptr<Session> session) {
     while (session->out.pop(packet)) {
         size_t sent = 0;
         while (sent < packet.size()) {
-            // send는 한 번에 다 나가지 않을 수 있다.
             ssize_t n = send(session->sock.fd(), packet.data() + sent, packet.size() - sent, 0);
             if (n <= 0) {
                 session->alive.store(false, std::memory_order_relaxed);
@@ -177,7 +173,6 @@ int Server::run() {
         return 1;
     }
 
-    // 재시작 시 TIME_WAIT 때문에 bind가 실패하는 것을 막는다.
     int reuse = 1;
     setsockopt(serv.fd(), SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
 
@@ -191,7 +186,7 @@ int Server::run() {
         perror("bind");
         return 1;
     }
-    // somaxconn이 128이라 동시 접속이 몰리면 일부가 거절된다. 봇은 램프업으로 붙는다.
+    // somaxconn 상한 때문에 봇은 램프업으로 붙는다.
     if (listen(serv.fd(), 128) < 0) {
         perror("listen");
         return 1;
@@ -217,7 +212,6 @@ int Server::run() {
 
         auto session = std::make_shared<Session>(Socket(clientFd), id, cfg_.sendQueueCapacity);
 
-        // 분포 제어는 봇의 --pattern이 하므로 스폰은 균등 랜덤.
         world_.pushCommand({CmdType::Spawn, id, pos(rng), pos(rng)});
 
         {
@@ -225,7 +219,6 @@ int Server::run() {
             sessions_.push_back(session);
         }
 
-        // 접속 직후 id를 알려준다. 이후 Move는 이 세션의 id로 처리된다.
         std::vector<uint8_t> hello;
         beginPacket(hello, PacketType::Hello, 0);
         appendBigEndian(4, id, hello);

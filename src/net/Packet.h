@@ -23,9 +23,7 @@ void serializeHeader (const PacketHeader& header, std::vector<uint8_t>& out);
 // 남은 바이트가 부족하면 std::out_of_range.
 PacketHeader deserializeHeader(const std::vector<uint8_t>& in, size_t startOffset);
 
-// 페이로드도 같은 방식으로 쓴다. Snapshot은 주변 인원에 따라 길이가 매번 다르다.
 void appendBigEndian(size_t size, uint32_t var, std::vector<uint8_t>& out);
 uint32_t readBigEndian(size_t size, int& idx, const std::vector<uint8_t>& in);
 
-// 앞 2바이트의 length 필드를 out.size()로 메운다.
 void patchLength(std::vector<uint8_t>& out);

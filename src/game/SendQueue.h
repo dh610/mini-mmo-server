@@ -11,7 +11,6 @@ class SendQueue {
 public:
     explicit SendQueue(size_t capacity) : capacity_(capacity) {}
 
-    // 버려진 개수를 반환한다.
     size_t push(std::vector<uint8_t>&& packet) {
         size_t dropped = 0;
         {
@@ -27,7 +26,6 @@ public:
         return dropped;
     }
 
-    // close되면 false. 송신 스레드는 그걸 보고 빠져나간다.
     bool pop(std::vector<uint8_t>& out) {
         std::unique_lock<std::mutex> lock(mutex_);
         cv_.wait(lock, [this] { return closed_ || !queue_.empty(); });

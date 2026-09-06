@@ -2,7 +2,6 @@
 
 Grid::Grid(int32_t mapSize, int32_t cellSize)
     : cellSize_(cellSize > 0 ? cellSize : 1) {
-    // 맵이 셀 크기로 나누어떨어지지 않으면 마지막 셀이 남는 만큼을 흡수한다.
     dim_ = mapSize / cellSize_ + 1;
     cells_.resize(static_cast<size_t>(dim_) * static_cast<size_t>(dim_));
 }
@@ -35,7 +34,6 @@ void Grid::remove(int32_t cx, int32_t cy, uint32_t id) {
 World::World(int32_t mapSize, int32_t aoiHalfExtent, int32_t cellSize, uint32_t maxEntities)
     : mapSize_(mapSize), aoi_(aoiHalfExtent), grid_(mapSize, cellSize), entities_(maxEntities) {
     freeSlots_.reserve(maxEntities);
-    // pop_back으로 꺼내므로 역순으로 채운다.
     for (uint32_t i = maxEntities; i > 0; --i) {
         entities_[i - 1].id = i - 1;
         freeSlots_.push_back(i - 1);
@@ -81,7 +79,7 @@ void World::applyCommands() {
                 break;
             case CmdType::Move: {
                 if (!e.active) break;
-                // 클라이언트가 보낸 좌표는 믿지 않고 맵 범위로 자른다.
+                // 클라이언트 좌표는 신뢰하지 않는다.
                 int32_t nx = c.x < 0 ? 0 : (c.x > mapSize_ ? mapSize_ : c.x);
                 int32_t ny = c.y < 0 ? 0 : (c.y > mapSize_ ? mapSize_ : c.y);
 

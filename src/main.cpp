@@ -23,7 +23,6 @@ void printUsage(const char* argv0) {
         argv0);
 }
 
-// 파라미터를 같은 줄에 찍는다. 조건 없는 숫자는 나중에 대조할 수 없다.
 void printSummary(const Config& cfg, const Metrics& m, uint64_t transitions, int seconds) {
     uint64_t ticks = m.ticks.load();
     uint64_t snapshots = m.snapshotsSent.load();
@@ -82,7 +81,6 @@ int main(int argc, char** argv) {
     Server server(cfg);
 
     if (duration > 0) {
-        // 측정용. 지정 시간이 지나면 요약을 찍고 종료한다.
         std::thread([&server, &cfg, duration] {
             std::this_thread::sleep_for(std::chrono::seconds(duration));
             printSummary(cfg, server.metrics(), server.world().cellTransitions(), duration);

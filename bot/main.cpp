@@ -57,7 +57,7 @@ Socket connectTo(const std::string& host, uint16_t port) {
     return s;
 }
 
-// 패턴별 다음 좌표. 봇마다 고정 시드를 주므로 같은 조건이 그대로 재현된다.
+// 봇마다 seed + index 를 시드로 준다. 같은 인자면 같은 부하가 재현된다.
 void nextPosition(Pattern p, const Options& opt, std::mt19937& rng, int index, int32_t& x,
                   int32_t& y) {
     std::uniform_int_distribution<int32_t> step(-40, 40);
@@ -109,7 +109,7 @@ void botMain(int index, Options opt) {
     std::uniform_int_distribution<int32_t> pos(0, opt.mapSize);
     int32_t x = pos(rng), y = pos(rng);
 
-    // 수신은 별도 스레드. 봇이 recv를 늦게 하면 서버 송신 큐가 쌓여 측정이 오염된다.
+    // 봇이 recv를 늦게 하면 서버 송신 큐가 쌓여 측정이 오염된다.
     std::thread reader([&sock] {
         std::vector<uint8_t> acc;
         size_t offset = 0;
@@ -231,7 +231,6 @@ int main(int argc, char** argv) {
     bots.reserve(static_cast<size_t>(opt.count));
     for (int i = 0; i < opt.count; ++i) {
         bots.emplace_back(botMain, i, opt);
-        // somaxconn이 128이라 동시에 붙이면 일부가 거절된다.
         std::this_thread::sleep_for(std::chrono::milliseconds(opt.rampUpMs));
     }
 
