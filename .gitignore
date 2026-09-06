@@ -7,3 +7,7 @@ compile_commands.json
 # AI 에이전트 지시/티칭 스크립트 — 프로젝트 산출물이 아니라 진행 방식 관리용
 CLAUDE.md
 docs/CPP-GUIDE.md
+docs/PLAN.md
+docs/GLOSSARY.md
+docs/SPEC.md
+docs/decisions/_배경.md
