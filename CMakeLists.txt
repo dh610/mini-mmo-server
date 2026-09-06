@@ -25,6 +25,7 @@ target_include_directories(mmo-bot PRIVATE src)
 target_link_libraries(mmo-bot PRIVATE pthread)
 
 enable_testing()
-add_executable(mmo-tests tests/test_packet.cpp src/net/Packet.cpp)
+add_executable(mmo-tests tests/test_packet.cpp tests/test_world.cpp
+               src/net/Packet.cpp src/world/World.cpp)
 target_include_directories(mmo-tests PRIVATE src third_party/doctest)
 add_test(NAME mmo-tests COMMAND mmo-tests)
